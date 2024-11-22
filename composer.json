@@ -3,7 +3,7 @@
   "description": "Laravel queue rate limiting.",
   "type": "library",
   "license": "MIT",
-  "keywords": [ "laravel" ],
+  "keywords": [ "laravel", "queue", "limit" ],
   "authors": [
     {
       "name": "Eugene Bourne",
