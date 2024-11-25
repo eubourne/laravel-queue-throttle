@@ -45,7 +45,7 @@ class QueueServiceProvider extends \Illuminate\Queue\QueueServiceProvider
         $this->app->singleton('queue.throttle', function ($app) {
             return new ThrottleManager(
                 app: $app,
-                rateLimits: $app['config']->get('queue.throttle'),
+                rateLimits: $app['config']->get('queue.throttle') ?: [],
                 logger: $app['queue.throttle-logger']
             );
         });

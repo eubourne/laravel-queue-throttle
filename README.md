@@ -2,6 +2,8 @@
 
 # Laravel Queue Throttle
 
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/eubourne/laravel-queue-throttle.svg?style=flat-square)](https://packagist.org/packages/eubourne/laravel-queue-throttle)
+
 **Laravel Queue Throttle**  is a package designed to manage and throttle the processing of jobs in Laravel queues.
 It enables you to set rate limits on your queues, preventing system overloads by controlling job execution rates.
 
