@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.0.2
+
+### Fixed
+* Log correct queue name when running a `TestJob` by `queue:fill` command.
+
 ## v1.0.1
 
 ### Fixed

@@ -33,7 +33,7 @@ class QueueFillCommand extends CommandAbstract
         $queue = $this->option('queue') ?: 'default';
 
         foreach (range(1, $count) as $i) {
-            TestJob::dispatch()->onQueue($queue);
+            TestJob::dispatch($queue)->onQueue($queue);
         }
 
         $this->comment('Queue: ' . $queue);
