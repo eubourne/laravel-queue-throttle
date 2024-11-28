@@ -6,8 +6,10 @@ use EuBourne\LaravelQueueThrottle\Events\LimitExceeded;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Queue\Factory as QueueManager;
+use Illuminate\Contracts\Queue\Job;
+use Illuminate\Contracts\Queue\Queue;
 use Illuminate\Queue\Worker;
-use Illuminate\Queue\WorkerOptions;
+use Illuminate\Support\Collection;
 use Psr\Log\LoggerInterface;
 
 class RateLimitedWorker extends Worker
@@ -19,6 +21,7 @@ class RateLimitedWorker extends Worker
         callable                   $isDownForMaintenance,
         protected ThrottleManager  $rateLimiter,
         protected ?LoggerInterface $logger,
+        protected bool             $debugToConsole = false,
         ?callable                  $resetScope = null,
     )
     {
@@ -26,66 +29,84 @@ class RateLimitedWorker extends Worker
     }
 
     /**
-     * Process the next job on the queue.
+     * Get the next job from the queue connection.
      *
-     * @param string $connectionName
+     * @param Queue $connection
      * @param string $queue
-     * @param WorkerOptions $options
-     * @return void
+     * @return Job|null
      */
-    public function runNextJob($connectionName, $queue, WorkerOptions $options): void
+    protected function getNextJob($connection, $queue): Job|null
     {
-        // There might be several queues specified for the worker. We need to process each of them
-        // separately to check rate limits for each queue.
-        foreach (explode(',', $queue) as $specificQueue) {
-            $this->logger?->debug('Checking queue "' . $specificQueue . '" for jobs...');
-
-            if ($this->manager->connection($connectionName)->size($specificQueue)) {
-                $this->logger?->debug('  Queue "' . $specificQueue . '" has jobs');
-
-                if ($this->runNextJobFromQueue($connectionName, $specificQueue, $options)) {
-                    $this->logger?->debug('  Successfully processed job on queue "' . $specificQueue . '". There might be more.');
-                    return;
-                }
-
-                $this->logger?->debug('  Queue has reached the rate limit. Moving to the next queue (if any).');
-            } else {
-                $this->logger?->debug('  Queue "' . $specificQueue . '" is empty. Moving to the next queue (if any).');
+        foreach ($this->getQueues($queue) as $specificQueue) {
+            if ($job = $this->getNextJobFromQueue($connection, $specificQueue)) {
+                return $job;
             }
         }
 
-        // If there were no jobs found in any worker's queue then sleep for the specified time.
-        $this->logger?->debug('All the queues are empty. Sleeping for ' . $options->sleep . ' seconds.');
-        $this->sleep($options->sleep);
+        return null;
     }
 
     /**
-     * Process the next job on the specific queue.
-     * Despite the runNextJob() method, that can accept a set of queues to process (like: mail-priority,mail), this
-     * method accepts only a single queue name at a time.
+     * Get the next job from the specific queue if its rate limit allows it.
      *
-     * Returning true means that there was a successful job processing attempt. If the queue hit the rate limit, then
-     * the method will return false.
-     *
-     * @param string $connectionName
+     * @param Queue $connection
      * @param string $queue
-     * @param WorkerOptions $options
-     * @return bool
+     * @return Job|null
      */
-    protected function runNextJobFromQueue(string $connectionName, string $queue, WorkerOptions $options): bool
+    protected function getNextJobFromQueue(Queue $connection, string $queue): Job|null
     {
-        $this->logger?->debug('  Checking rate limit for queue "' . $queue . '"...');
+        $this->debug('Processing [' . $queue . '] queue');
 
-        return $this->rateLimiter->attempt(
-            queue: $queue,
-            action: function () use ($connectionName, $queue, $options) {
-                $this->logger?->debug('    Running job on queue "' . $queue . '"');
-                parent::runNextJob($connectionName, $queue, $options);
-            },
-            onLimitReached: function (int $availableIn, string $queue) {
-                $this->logger?->debug('    Rate limit is reached for queue "' . $queue . '". Next job will be started in ' . $availableIn . ' seconds');
-                $this->events->dispatch(new LimitExceeded($queue, $availableIn));
-            }
-        );
+        if ($jobsCount = $connection->size($queue)) {
+            $this->debug('  Queue [' . $queue . '] has ' . $jobsCount . ' jobs');
+
+            $this->debug('  Checking rate limit for queue [' . $queue . ']...');
+            return $this->rateLimiter->attempt(
+                queue: $queue,
+                onSuccess: function () use ($connection, $queue) {
+                    $job = parent::getNextJob($connection, $queue);
+
+                    $job
+                        ? $this->debug('    Running job ' . $job->getJobId() . ':' . $job->resolveName() . ' on queue [' . $queue . ']')
+                        : $this->debug('    Cannot get a job from queue [' . $queue . '], it seems to be empty');
+
+                    return $job;
+                },
+                onLimitReached: function (int $availableIn, string $queue) {
+                    $this->debug('    Rate limit is reached for queue [' . $queue . ']. Next job will be started in ' . $availableIn . ' seconds');
+                    $this->events->dispatch(new LimitExceeded($queue, $availableIn));
+                }
+            );
+        } else {
+            $this->debug('  Queue [' . $queue . '] is empty, skipping...');
+        }
+
+        return null;
+    }
+
+    /**
+     * Get a collection of queues from the queue names, separated by comma.
+     *
+     * @param string $queue
+     * @return Collection
+     */
+    protected function getQueues(string $queue): Collection
+    {
+        return new Collection(explode(',', $queue));
+    }
+
+    /**
+     * Log a debug message.
+     *
+     * @param string $message
+     * @return void
+     */
+    protected function debug(string $message): void
+    {
+        if ($this->debugToConsole) {
+            echo "[DEBUG]: $message\n";
+        }
+
+        $this->logger?->debug($message);
     }
 }

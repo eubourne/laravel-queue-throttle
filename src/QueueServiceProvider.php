@@ -91,6 +91,7 @@ class QueueServiceProvider extends \Illuminate\Queue\QueueServiceProvider
                 isDownForMaintenance: $isDownForMaintenance,
                 rateLimiter: $app['queue.throttle'],
                 logger: $app['queue.throttle-logger'],
+                debugToConsole: $app['config']->get('queue.throttle_debug_to_console', false),
                 resetScope: $resetScope
             );
         });

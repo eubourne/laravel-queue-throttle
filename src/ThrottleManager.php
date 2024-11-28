@@ -4,6 +4,7 @@ namespace EuBourne\LaravelQueueThrottle;
 
 use Illuminate\Cache\RateLimiter;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Contracts\Queue\Job;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Psr\Log\LoggerInterface;
@@ -27,15 +28,15 @@ class ThrottleManager
      * Attempt to execute an action if the rate limit allows it.
      *
      * @param string $queue
-     * @param callable $action
+     * @param callable $onSuccess
      * @param callable $onLimitReached
-     * @return bool
+     * @return Job|null
      */
     public function attempt(
         string   $queue,
-        callable $action,
+        callable $onSuccess,
         callable $onLimitReached,
-    ): bool
+    ): Job|null
     {
         // Get throttling rules for the queue
         $throttling = $this->getQueueConfiguration($queue);
@@ -46,15 +47,14 @@ class ThrottleManager
             if ($this->rateLimiter->tooManyAttempts($group, (int)$allows)) {
                 $availableIn = $this->rateLimiter->availableIn($group);
                 $this->app->call($onLimitReached, compact('availableIn', 'queue'));
-                return false;
-            } else {
-                $this->rateLimiter->hit($group, (int)$every);
-                $this->app->call($action);
+                return null;
             }
+
+            $this->rateLimiter->hit($group, (int)$every);
         }
 
         // There are no throttling rules for this queue.
-        return true;
+        return $this->app->call($onSuccess);
     }
 
     /**
