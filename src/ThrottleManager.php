@@ -133,7 +133,7 @@ class ThrottleManager
         $this->logger?->debug('    Building queue groups map...');
 
         return collect(array_keys($rateLimits))
-            ->flatMap(fn(string $group) => collect(explode(':', $group))
+            ->flatMap(fn(string $group) => collect(explode(',', str_replace(':', ',', $group)))
                 ->flatMap(fn(string $queue) => [
                     $queue => array_merge([
                         'group' => $group
