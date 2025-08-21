@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.0
+
+* **Added Laravel 12 Support**
+
 ## v1.0.2
 
 ### Fixed
